@@ -30,7 +30,6 @@ export function AppRouter() {
                 </Route>
 
                 <Route element={<PrivateRoute />}>
-                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/tasks" element={<TasksPage />} />
                     <Route path="/goals" element={<GoalsPage />} />
                 </Route>
