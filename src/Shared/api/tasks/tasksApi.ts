@@ -39,11 +39,6 @@ function buildQuery(filters: TaskFilters) {
     return q.order('created_at', { ascending: false });
 }
 
-export async function fetchTasks(filters: TaskFilters): Promise<Task[]> {
-    const { data, error } = await buildQuery(filters);
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Task[];
-}
 
 export async function createTask(input: TaskCreateInput): Promise<Task> {
     const { data: auth } = await supabase.auth.getUser();
@@ -66,6 +61,12 @@ export async function createTask(input: TaskCreateInput): Promise<Task> {
 
     if (error) throw new Error(error.message);
     return data as Task;
+}
+
+export async function fetchTasks(filters: TaskFilters): Promise<Task[]> {
+    const { data, error } = await buildQuery(filters);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Task[];
 }
 
 export async function updateTask(input: TaskUpdateInput): Promise<Task> {
