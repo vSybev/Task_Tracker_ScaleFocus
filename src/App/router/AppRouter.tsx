@@ -7,7 +7,6 @@ import {NotFoundPage} from '../../Pages/NotFoundPage/NotFoundPage';
 import {AppLayout} from '../Layouts/AppLayout';
 
 // (по желание) placeholder settings/profile страници
-import {ProfilePage} from '../Ui/ProfilePage';
 import {SettingsPage} from '../Ui/SettingsPage';
 import {LandingRoute} from "./LandingRoute.tsx";
 import {TasksPage} from "../../Pages/TasksPage/TaskPage.tsx";
@@ -25,7 +24,6 @@ export function AppRouter() {
 
                 <Route element={<PrivateRoute />}>
                     <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                 </Route>
 

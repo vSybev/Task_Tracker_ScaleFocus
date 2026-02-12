@@ -21,12 +21,14 @@ import {
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import type { Task, TaskFilters, TaskPriority, TaskStatus } from '../../Shared/api/tasks/types';
 import { createTask, deleteTask, fetchTasks, updateTask } from '../../Shared/api/tasks/tasksApi';
 import { TaskDialog } from './TaskDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmationDialog';
+import { fetchGoalsForSelect } from '../../Shared/api/goals/goalsApi';
 
 const statusOptions: { value: TaskStatus | 'all'; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -42,7 +44,10 @@ const priorityOptions: { value: TaskPriority | 'all'; label: string }[] = [
     { value: 'high', label: 'High' },
 ];
 
-const dueOptions: { value: TaskFilters['due']; label: string }[] = [
+// Helper type: removes undefined from optional field
+type DueFilter = NonNullable<TaskFilters['due']>;
+
+const dueOptions: { value: DueFilter; label: string }[] = [
     { value: 'all', label: 'All' },
     { value: 'overdue', label: 'Overdue' },
     { value: 'today', label: 'Today' },
@@ -62,13 +67,30 @@ function priorityChip(priority: TaskPriority) {
     return <Chip size="small" label="Medium" variant="outlined" />;
 }
 
+function isStatus(v: string | null): v is TaskStatus | 'all' {
+    return v === 'all' || v === 'todo' || v === 'in_progress' || v === 'completed';
+}
+
+function isPriority(v: string | null): v is TaskPriority | 'all' {
+    return v === 'all' || v === 'low' || v === 'medium' || v === 'high';
+}
+
+// ✅ FIXED: predicate returns NonNullable<...> (no undefined)
+function isDue(v: string | null): v is DueFilter {
+    return v === 'all' || v === 'overdue' || v === 'today' || v === 'this_week' || v === 'no_due_date';
+}
+
 export function TasksPage() {
     const [filters, setFilters] = useState<TaskFilters>({
         status: 'all',
         priority: 'all',
         due: 'all',
         search: '',
+        goal_id: null,
     });
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const skipUrlWriteRef = useRef(false);
 
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState<Task[]>([]);
@@ -84,12 +106,65 @@ export function TasksPage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    const [goalsMap, setGoalsMap] = useState<Record<string, string>>({});
+
+    // 1) URL -> filters (read query params)
+    useEffect(() => {
+        const statusQ = searchParams.get('status');
+        const priorityQ = searchParams.get('priority');
+        const dueQ = searchParams.get('due');
+        const searchQ = searchParams.get('search');
+        const goalIdQ = searchParams.get('goalId'); // URL stays goalId, state uses goal_id
+
+        skipUrlWriteRef.current = true;
+
+        setFilters({
+            status: isStatus(statusQ) ? statusQ : 'all',
+            priority: isPriority(priorityQ) ? priorityQ : 'all',
+            due: isDue(dueQ) ? dueQ : 'all',
+            search: typeof searchQ === 'string' ? searchQ : '',
+            goal_id: goalIdQ ? goalIdQ : null,
+        });
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
+
+    // 2) filters -> URL (keep URL in sync)
+    useEffect(() => {
+        if (skipUrlWriteRef.current) {
+            skipUrlWriteRef.current = false;
+            return;
+        }
+
+        const next = new URLSearchParams();
+
+        if (filters.status && filters.status !== 'all') next.set('status', String(filters.status));
+        if (filters.priority && filters.priority !== 'all') next.set('priority', String(filters.priority));
+        if (filters.due && filters.due !== 'all') next.set('due', String(filters.due));
+        if (filters.search && filters.search.trim()) next.set('search', filters.search.trim());
+        if (filters.goal_id) next.set('goalId', filters.goal_id);
+
+        const current = searchParams.toString();
+        const upcoming = next.toString();
+        if (current !== upcoming) setSearchParams(next, { replace: true });
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters.status, filters.priority, filters.due, filters.search, filters.goal_id]);
+
     const load = async () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await fetchTasks(filters);
-            setRows(data);
+            const [tasks, goals] = await Promise.all([
+                fetchTasks(filters),
+                fetchGoalsForSelect(),
+            ]);
+
+            setRows(tasks);
+
+            const map: Record<string, string> = {};
+            for (const g of goals) map[g.id] = g.name;
+            setGoalsMap(map);
         } catch (e: any) {
             setError(e.message ?? 'Failed to load tasks');
         } finally {
@@ -100,14 +175,15 @@ export function TasksPage() {
     useEffect(() => {
         void load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.status, filters.priority, filters.due, filters.search]);
+    }, [filters.status, filters.priority, filters.due, filters.search, filters.goal_id]);
 
     const hasFilters = useMemo(() => {
         return (
             (filters.status && filters.status !== 'all') ||
             (filters.priority && filters.priority !== 'all') ||
             (filters.due && filters.due !== 'all') ||
-            Boolean(filters.search?.trim())
+            Boolean(filters.search?.trim()) ||
+            Boolean(filters.goal_id)
         );
     }, [filters]);
 
@@ -230,8 +306,24 @@ export function TasksPage() {
                             sx={{ minWidth: 190 }}
                         >
                             {dueOptions.map((o) => (
-                                <MenuItem key={o.value ?? 'all'} value={o.value ?? 'all'}>
+                                <MenuItem key={o.value} value={o.value}>
                                     {o.label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+
+                        {/* Goal filter */}
+                        <TextField
+                            label="Goal"
+                            select
+                            value={filters.goal_id ?? ''}
+                            onChange={(e) => setFilters((f) => ({ ...f, goal_id: e.target.value ? String(e.target.value) : null }))}
+                            sx={{ minWidth: 210 }}
+                        >
+                            <MenuItem value="">All goals</MenuItem>
+                            {Object.entries(goalsMap).map(([id, name]) => (
+                                <MenuItem key={id} value={id}>
+                                    {name}
                                 </MenuItem>
                             ))}
                         </TextField>
@@ -239,7 +331,15 @@ export function TasksPage() {
                         {hasFilters && (
                             <Button
                                 variant="text"
-                                onClick={() => setFilters({ status: 'all', priority: 'all', due: 'all', search: '' })}
+                                onClick={() =>
+                                    setFilters({
+                                        status: 'all',
+                                        priority: 'all',
+                                        due: 'all',
+                                        search: '',
+                                        goal_id: null,
+                                    })
+                                }
                             >
                                 Clear
                             </Button>
@@ -282,6 +382,7 @@ export function TasksPage() {
                                         <TableCell sx={{ fontWeight: 700 }}>Title</TableCell>
                                         <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                                         <TableCell sx={{ fontWeight: 700 }}>Priority</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }}>Goal</TableCell>
                                         <TableCell sx={{ fontWeight: 700 }}>Due</TableCell>
                                         <TableCell sx={{ fontWeight: 700, width: 120 }} align="right">
                                             Actions
@@ -305,6 +406,15 @@ export function TasksPage() {
 
                                             <TableCell>{statusChip(t.status)}</TableCell>
                                             <TableCell>{priorityChip(t.priority)}</TableCell>
+
+                                            <TableCell>
+                                                {t.goal_id && goalsMap[t.goal_id] ? (
+                                                    <Chip size="small" label={goalsMap[t.goal_id]} variant="outlined" />
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </TableCell>
+
                                             <TableCell>{t.due_date ?? '—'}</TableCell>
 
                                             <TableCell align="right">
@@ -356,7 +466,6 @@ export function TasksPage() {
                     </Alert>
                 </Snackbar>
             )}
-
         </Stack>
     );
 }

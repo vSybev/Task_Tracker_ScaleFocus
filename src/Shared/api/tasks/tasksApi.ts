@@ -7,6 +7,9 @@ function buildQuery(filters: TaskFilters) {
     if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
     if (filters.priority && filters.priority !== 'all') q = q.eq('priority', filters.priority);
 
+    // ✅ NEW: Goal filter
+    if (filters.goal_id) q = q.eq('goal_id', filters.goal_id);
+
     // Date helpers
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -39,7 +42,6 @@ function buildQuery(filters: TaskFilters) {
     return q.order('created_at', { ascending: false });
 }
 
-
 export async function createTask(input: TaskCreateInput): Promise<Task> {
     const { data: auth } = await supabase.auth.getUser();
     const userId = auth.user?.id;
@@ -65,6 +67,7 @@ export async function createTask(input: TaskCreateInput): Promise<Task> {
 
 export async function fetchTasks(filters: TaskFilters): Promise<Task[]> {
     const { data, error } = await buildQuery(filters);
+
     if (error) throw new Error(error.message);
     return (data ?? []) as Task[];
 }

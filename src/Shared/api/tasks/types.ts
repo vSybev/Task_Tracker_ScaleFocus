@@ -34,4 +34,7 @@ export type TaskFilters = {
     priority?: TaskPriority | 'all';
     due?: 'all' | 'overdue' | 'today' | 'this_week' | 'no_due_date';
     search?: string;
+
+    // ✅ NEW: filter by linked goal
+    goal_id?: string | null;
 };

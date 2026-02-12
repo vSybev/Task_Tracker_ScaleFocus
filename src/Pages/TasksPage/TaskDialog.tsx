@@ -1,7 +1,10 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField } from '@mui/material';
 import { Formik } from 'formik';
 import * as yup from 'yup';
+import { useEffect, useState } from 'react';
+
 import type { Task, TaskCreateInput, TaskPriority, TaskStatus } from '../../Shared/api/tasks/types';
+import { fetchGoalsForSelect } from '../../Shared/api/goals/goalsApi';
 
 const schema = yup.object({
     title: yup.string().trim().max(120).required('Title is required'),
@@ -9,6 +12,7 @@ const schema = yup.object({
     due_date: yup.string().nullable(),
     priority: yup.mixed<TaskPriority>().oneOf(['low', 'medium', 'high']).required(),
     status: yup.mixed<TaskStatus>().oneOf(['todo', 'in_progress', 'completed']).required(),
+    // goal_id е optional -> няма нужда от validation
 });
 
 const priorityOptions: { value: TaskPriority; label: string }[] = [
@@ -23,6 +27,8 @@ const statusOptions: { value: TaskStatus; label: string }[] = [
     { value: 'completed', label: 'Completed' },
 ];
 
+type GoalSelectItem = { id: string; name: string };
+
 export function TaskDialog(props: {
     open: boolean;
     mode: 'create' | 'edit';
@@ -32,6 +38,19 @@ export function TaskDialog(props: {
     onSubmit: (values: TaskCreateInput) => Promise<void>;
 }) {
     const { open, mode, initial, loading, onClose, onSubmit } = props;
+
+    const [goals, setGoals] = useState<GoalSelectItem[]>([]);
+    const [goalsLoading, setGoalsLoading] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+
+        setGoalsLoading(true);
+        fetchGoalsForSelect()
+            .then((data) => setGoals(data))
+            .catch(() => setGoals([]))
+            .finally(() => setGoalsLoading(false));
+    }, [open]);
 
     const initialValues: TaskCreateInput = {
         title: initial?.title ?? '',
@@ -56,7 +75,8 @@ export function TaskDialog(props: {
                         title: values.title.trim(),
                         description: values.description?.trim() ? values.description.trim() : null,
                         due_date: values.due_date ? values.due_date : null,
-                        goal_id: values.goal_id ?? null,
+                        // ако goal_id е празен string от select -> правим null
+                        goal_id: values.goal_id ? values.goal_id : null,
                     };
 
                     await onSubmit(cleaned);
@@ -96,6 +116,28 @@ export function TaskDialog(props: {
                                     InputLabelProps={{ shrink: true }}
                                 />
 
+                                {/* Goal select */}
+                                <TextField
+                                    name="goal_id"
+                                    label="Goal"
+                                    select
+                                    value={values.goal_id ?? ''}
+                                    onChange={handleChange}
+                                    helperText="Optional"
+                                    disabled={goalsLoading}
+                                >
+                                    <MenuItem value="">
+                                        {goalsLoading ? 'Loading goals...' : 'No goal'}
+                                    </MenuItem>
+
+                                    {!goalsLoading &&
+                                        goals.map((g) => (
+                                            <MenuItem key={g.id} value={g.id}>
+                                                {g.name}
+                                            </MenuItem>
+                                        ))}
+                                </TextField>
+
                                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                                     <TextField
                                         name="priority"
@@ -112,7 +154,14 @@ export function TaskDialog(props: {
                                         ))}
                                     </TextField>
 
-                                    <TextField name="status" label="Status" select fullWidth value={values.status} onChange={handleChange}>
+                                    <TextField
+                                        name="status"
+                                        label="Status"
+                                        select
+                                        fullWidth
+                                        value={values.status}
+                                        onChange={handleChange}
+                                    >
                                         {statusOptions.map((o) => (
                                             <MenuItem key={o.value} value={o.value}>
                                                 {o.label}

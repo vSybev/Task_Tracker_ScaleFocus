@@ -135,15 +135,6 @@ export function HeaderComponent() {
                                 <MenuItem
                                     onClick={() => {
                                         handleCloseMenu();
-                                        navigate('/profile');
-                                    }}
-                                >
-                                    Profile
-                                </MenuItem>
-
-                                <MenuItem
-                                    onClick={() => {
-                                        handleCloseMenu();
                                         navigate('/settings');
                                     }}
                                 >
@@ -152,10 +143,6 @@ export function HeaderComponent() {
 
                                 <MenuItem onClick={handleLogout}>Logout</MenuItem>
                             </Menu>
-
-                            <Button color="inherit" onClick={handleLogout} sx={{ textTransform: 'none' }}>
-                                Logout
-                            </Button>
                         </>
                     )}
                 </Box>
